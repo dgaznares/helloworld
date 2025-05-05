@@ -39,6 +39,18 @@ pipeline{
                                     java -jar /Users/david/Wiremock/wiremock-standalone-3.13.0.jar --port 9090 --root-dir ./test/wiremock &
                                     echo 'Miramos que procesos estan levantados...'
                                     ps|grep java
+                                    timeout=30
+                                    while ! nc -z 127.0.0.1 9090; do
+                                        sleep 1
+                                        timeout=$((timeout - 1))
+                                        if [ $timeout -le 0 ]; then
+                                            echo "Timeout esperando a Wiremock"
+                                            WIREMOCK_PID = $(ps | grep 'wiremock' | grep -v grep | awk '{print $1}')
+                                            echo $WIREMOCK_PID
+                                            kill $WIREMOCK_PID
+                                            exit 1
+                                        fi
+                                    done
                                     echo 'Lanzamos las pruebas...'
                                     pytest --junitxml=result-rest.xml ./test/rest
                                 '''
