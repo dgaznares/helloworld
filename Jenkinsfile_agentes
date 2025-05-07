@@ -1,0 +1,100 @@
+pipeline{
+    agent none
+    environment {
+        FLASK_APP = "./app/api.py"
+    }
+    stages{
+        stage('Get Code'){
+            agent { label 'mac' }
+            steps{
+                sh 'whoami' 
+                sh 'hostname'
+                sh 'date'
+                echo "Descargando código de Git..."
+                git 'https://github.com/dgaznares/helloworld.git'
+                sh 'ls -la'
+                echo 'WORKSPACE->' + WORKSPACE
+                stash name: 'workspace', includes: '**/*'
+                cleanWs()
+            }
+        }
+        stage('Build'){
+            agent { label 'mac' }
+            steps{
+                sh 'whoami' 
+                sh 'hostname'
+                echo("No vamos a hacer nada.")
+                cleanWs()
+            }
+        }
+        stage('Test'){  
+                parallel {
+                   stage('JUnit'){
+                       agent { label 'mac' }
+                        steps{
+                          sh 'env'
+                          sh 'whoami' 
+                          sh 'hostname' 
+                          echo 'Recuoeramos el workspace: unstash...'
+                          unstash 'workspace'
+                          sh '''
+                            export PYTHONPATH="$WORKSPACE"
+                            echo "PYTHONPATH -> $PYTHONPATH"
+                            mkdir  -p test-results/unit
+                            pytest --junitxml=test-results/unit/result-unit.xml ./test/unit
+                          '''    
+                          stash name: 'result-unit', includes: 'test-results/unit/**'
+                          cleanWs()
+                        }
+                    }
+                    stage('Prueba de servicios'){
+                        agent { label 'linux' }
+                        steps{
+                            sh 'whoami' 
+                            sh 'hostname'
+                            echo 'Recuoeramos el workspace: unstash...'
+                            unstash 'workspace'
+                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                                sh '''
+                                    echo 'Levantamos Flask...'
+                                    flask run &
+                                    echo 'Levantamos el Wiremock...'
+                                    java -jar /Users/david/Wiremock/wiremock-standalone-3.13.0.jar --port 9090 --root-dir ./test/wiremock &
+                                    echo 'Miramos que procesos estan levantados...'
+                                    ps|grep java
+                                    timeout=30
+                                    while ! nc -z 127.0.0.1 9090; do
+                                        sleep 1
+                                        timeout=$((timeout - 1))
+                                        if [ $timeout -le 0 ]; then
+                                            echo "Timeout esperando a Wiremock"
+                                            WIREMOCK_PID = $(ps | grep 'wiremock' | grep -v grep | awk '{print $1}')
+                                            echo $WIREMOCK_PID
+                                            kill $WIREMOCK_PID
+                                            exit 1
+                                        fi
+                                    done
+                                    mkdir -p test-results/rest
+                                    echo 'Lanzamos las pruebas...'
+                                    pytest --junitxml=test-results/rest/result-rest.xml ./test/rest
+                                '''
+                                stash name: 'result-rest', includes: 'test-results/rest/**'
+                                cleanWs()
+                            }
+                        }
+                    }
+                }
+         }
+         stage('Results'){
+             agent any
+             steps{
+                 sh 'whoami' 
+                 sh 'hostname'
+                 unstash 'result-unit'
+                 unstash 'result-rest'
+                 junit 'test-results/**/result*.xml'
+                 cleanWs()
+             }
+         }
+    }
+}
