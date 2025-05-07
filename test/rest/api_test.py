@@ -1,6 +1,7 @@
 import http.client
 import os
 import unittest
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 import pytest
@@ -34,6 +35,38 @@ class TestApi(unittest.TestCase):
         self.assertEqual(
             response.read().decode(), "8", "ERROR SQRT"
         )
+
+    def test_api_multiply(self):
+        url = f"{BASE_URL}/calc/multiply/1/2"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(
+            response.status, http.client.OK, f"Error en la petición API a {url}"
+        )
+        self.assertEqual(
+            response.read().decode(), "2", "ERROR MULTIPLY"
+        )
+
+    def test_api_divide_by_cero(self):
+        url = f"{BASE_URL}/calc/divide/2/0"
+        response = None
+        try:
+            response = urlopen(url, timeout=DEFAULT_TIMEOUT)            
+        except HTTPError as e:
+            self.assertEqual(
+                e.code,
+                http.client.NOT_ACCEPTABLE,
+                    f"Error en la petición API a {url}"
+        )
+
+    def test_api_divide(self):
+        url = f"{BASE_URL}/calc/divide/2/1"
+        response = urlopen(url, timeout=DEFAULT_TIMEOUT)
+        self.assertEqual(
+            response.status, http.client.OK, f"Error en la petición API a {url}"
+        )
+        self.assertEqual(
+            response.read().decode(), "2.0", "ERROR DIVIDE"
+        )  
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
