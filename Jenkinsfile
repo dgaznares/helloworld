@@ -7,6 +7,7 @@ pipeline{
     stages{
         stage('Get Code'){
             steps{
+                cleanWs()
                 echo "Fecha de ejecución..." 
                 sh 'date'
                 echo "Me voy a traer el codigo"
