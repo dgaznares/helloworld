@@ -7,11 +7,12 @@ pipeline{
     stages{
         stage('Get Code'){
             steps{
-                cleanWs()
+                deleteDir()
                 echo "Fecha de ejecución..." 
                 sh 'date'
                 echo "Me voy a traer el codigo"
-                git 'https://github.com/dgaznares/helloworld.git'
+                checkout scmGit(branches: [[name: '**']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/dgaznares/helloworld.git']])
+                //git 'https://github.com/dgaznares/helloworld.git'
                 sh 'ls -la'
                 echo WORKSPACE
             }
@@ -63,6 +64,7 @@ pipeline{
          stage('Results'){
              steps{
                  junit 'result*.xml'
+                 deleteDir()
              }
          }
     }
