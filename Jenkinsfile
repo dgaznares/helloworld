@@ -11,7 +11,7 @@ pipeline{
                 echo "Fecha de ejecución..." 
                 sh 'date'
                 echo "Me voy a traer el codigo"
-                checkout scmGit(branches: [[name: '**']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/dgaznares/helloworld.git']])
+                git url: 'https://github.com/dgaznares/helloworld.git'
                 sh 'ls -la'
                 echo WORKSPACE
             }
