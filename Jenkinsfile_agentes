@@ -1,61 +1,59 @@
 pipeline{
-    agent none
-    environment {
+    agent any
+    environment {        
         FLASK_APP = "./app/api.py"
     }
     stages{
         stage('Get Code'){
-            agent { label 'mac' }
+            agent { label 'linux' }
             steps{
+                deleteDir()
+                echo "Fecha de ejecución..." 
+                sh 'date'
                 sh 'whoami' 
                 sh 'hostname'
-                sh 'date'
-                echo "Descargando código de Git..."
-                git 'https://github.com/dgaznares/helloworld.git'
+                echo "Me voy a traer el codigo"
+                checkout scmGit(branches: [[name: 'master']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/dgaznares/helloworld.git']])
                 sh 'ls -la'
-                echo 'WORKSPACE->' + WORKSPACE
+                echo WORKSPACE
                 stash name: 'workspace', includes: '**/*'
                 cleanWs()
             }
         }
-        stage('Build'){
-            agent { label 'mac' }
-            steps{
-                sh 'whoami' 
-                sh 'hostname'
-                echo("No vamos a hacer nada.")
-                cleanWs()
-            }
-        }
         stage('Test'){  
-                parallel {
-                   stage('JUnit'){
-                       agent { label 'mac' }
-                        steps{
-                          sh 'env'
+            parallel {
+                stage('JUnit'){
+                    agent { label 'mac' }
+                    steps{
                           sh 'whoami' 
                           sh 'hostname' 
-                          echo 'Recuoeramos el workspace: unstash...'
+                          echo 'Recuperamos el workspace: unstash...'
                           unstash 'workspace'
                           sh '''
-                            export PYTHONPATH="$WORKSPACE"
-                            echo "PYTHONPATH -> $PYTHONPATH"
-                            mkdir  -p test-results/unit
-                            pytest --junitxml=test-results/unit/result-unit.xml ./test/unit
-                          '''    
-                          stash name: 'result-unit', includes: 'test-results/unit/**'
+                                ls -la
+                                export PYTHONPATH="$WORKSPACE"
+                                echo "PYTHONPATH -> $PYTHONPATH"                     
+                                coverage run \
+                                    --branch \
+                                    --data-file=.coverage \
+                                    --source=app \
+                                    --omit="app/__init__.py,app/api.py" \
+                                    -m pytest ./test/unit
+                            '''                          
+                          stash name: 'workspace', includes: '**/*'
                           cleanWs()
-                        }
                     }
-                    stage('Prueba de servicios'){
-                        agent { label 'linux' }
-                        steps{
-                            sh 'whoami' 
-                            sh 'hostname'
-                            echo 'Recuoeramos el workspace: unstash...'
+                }
+
+                stage('Rest'){
+                    agent { label 'linux' }
+                    steps{
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            echo 'Recuperamos el workspace: unstash...'
                             unstash 'workspace'
-                            catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
-                                sh '''
+                             sh '''
+                                    whoami 
+                                    hostname 
                                     echo 'Levantamos Flask...'
                                     flask run &
                                     echo 'Levantamos el Wiremock...'
@@ -74,27 +72,108 @@ pipeline{
                                             exit 1
                                         fi
                                     done
-                                    mkdir -p test-results/rest
                                     echo 'Lanzamos las pruebas...'
-                                    pytest --junitxml=test-results/rest/result-rest.xml ./test/rest
-                                '''
-                                stash name: 'result-rest', includes: 'test-results/rest/**'
-                                cleanWs()
-                            }
+                                    pytest ./test/rest
+                            '''
+                            cleanWs()
                         }
                     }
                 }
-         }
-         stage('Results'){
-             agent any
-             steps{
-                 sh 'whoami' 
-                 sh 'hostname'
-                 unstash 'result-unit'
-                 unstash 'result-rest'
-                 junit 'test-results/**/result*.xml'
-                 cleanWs()
-             }
-         }
+                ///DEsde aaqui
+                stage('Static'){
+                    agent { label 'mac' }
+                    steps{
+                        echo 'Recuperamos el workspace: unstash...'
+                        unstash 'workspace'
+                        sh '''
+                            ls -la
+                            whoami 
+                            hostname 
+                            flake8 --exit-zero --format=pylint app > flake8.out
+                        '''
+                        recordIssues qualityGates: [
+                                [integerThreshold: 8, threshold: 8.0, type: 'TOTAL'], 
+                                [criticality: 'FAILURE', integerThreshold: 10, threshold: 10.0, type: 'TOTAL']
+                            ], 
+                            tools: [
+                                flake8(linesLookAhead: 0, pattern: 'flake8.out')
+                        ]
+                        cleanWs()
+                    }
+                }
+               stage('Security'){
+                    agent { label 'linux' }
+                    steps{
+                        echo 'Recuperamos el workspace: unstash...'
+                        unstash 'workspace'
+                        sh '''
+                            ls -la
+                            whoami 
+                            hostname 
+                            bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
+                         '''
+                        recordIssues(
+                            tools: [pyLint(name: "Bandit", pattern: 'bandit.out')],
+                            qualityGates: [
+                                    [threshold: 2, type: 'TOTAL', unstable: true],
+                                    [threshold: 4, type: 'TOTAL', unstable: false]
+                            ]
+                        )
+                        cleanWs()
+                    }
+                }
+                stage('Performance'){
+                    agent { label 'mac' }
+                    steps{
+                        echo 'Recuperamos el workspace: unstash...'                   
+                        unstash 'workspace'
+                        sh '''
+                            env
+                            whoami 
+                            hostname 
+                            echo "PATH ->" $PATH
+                            if ! nc -z 127.0.0.1 5000 ; then
+                                echo 'Levantamos Flask...'
+                                flask run &
+                            fi
+                            echo 'Flask levantado...'
+                            echo 'Lanzamos las pruebas de Rendimiento...'
+                            jmeter -n -t ./test/jmeter/cp1b.jmx -f -l flask.jtl 
+                        '''
+                        perfReport sourceDataFiles: 'flask.jtl'
+                        cleanWs()
+                    }
+                }
+                //hasta aqui
+            }                        
+        }
+        stage('Cobertura'){
+            agent { label 'mac' }
+            steps{
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    echo 'Recuperamos el workspace: unstash...'                   
+                    unstash 'workspace'
+                    sh '''
+                        ls -la
+                        whoami 
+                        hostname 
+                        coverage xml
+                        ls -la
+                    '''
+                    recordCoverage qualityGates: 
+                        [
+                            [integerThreshold: 95, metric: 'LINE', threshold: 95.0], 
+                            [criticality: 'ERROR', integerThreshold: 85, metric: 'LINE', threshold: 85.0], 
+                            [criticality: 'ERROR', integerThreshold: 80, metric: 'BRANCH', threshold: 80.0], 
+                            [integerThreshold: 90, metric: 'BRANCH', threshold: 90.0]
+                        ], 
+                    tools: 
+                        [
+                            [parser: 'COBERTURA', pattern: 'coverage.xml']
+                        ]
+                    cleanWs()
+                }
+            }
+        }
     }
 }
