@@ -13,7 +13,7 @@ pipeline{
                 sh 'whoami' 
                 sh 'hostname'
                 echo "Me voy a traer el codigo"
-                git url: 'https://github.com/dgaznares/helloworld.git'
+                checkout scm
                 sh 'ls -la'
                 echo WORKSPACE
                 stash name: 'workspace', includes: '**/*'

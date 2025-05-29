@@ -11,7 +11,7 @@ pipeline{
                 echo "Fecha de ejecución..." 
                 sh 'date'
                 echo "Me voy a traer el codigo"
-                git url: 'https://github.com/dgaznares/helloworld.git'
+                checkout scm
                 sh 'ls -la'
                 echo WORKSPACE
             }
