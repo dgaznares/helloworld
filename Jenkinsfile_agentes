@@ -12,10 +12,10 @@ pipeline{
                 sh 'date'
                 sh 'whoami' 
                 sh 'hostname'
+                echo WORKSPACE 
                 echo "Me voy a traer el codigo"
                 checkout scm
-                sh 'ls -la'
-                echo WORKSPACE
+                sh 'ls -la'                
                 stash name: 'workspace', includes: '**/*'
                 cleanWs()
             }
@@ -26,7 +26,8 @@ pipeline{
                     agent { label 'mac' }
                     steps{
                           sh 'whoami' 
-                          sh 'hostname' 
+                          sh 'hostname'
+                          echo WORKSPACE 
                           echo 'Recuperamos el workspace: unstash...'
                           unstash 'workspace'
                           sh '''
@@ -49,11 +50,12 @@ pipeline{
                     agent { label 'linux' }
                     steps{
                         catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                            sh 'whoami' 
+                            sh 'hostname'
+                            echo WORKSPACE 
                             echo 'Recuperamos el workspace: unstash...'
                             unstash 'workspace'
                              sh '''
-                                    whoami 
-                                    hostname 
                                     echo 'Levantamos Flask...'
                                     flask run &
                                     echo 'Levantamos el Wiremock...'
@@ -83,12 +85,12 @@ pipeline{
                 stage('Static'){
                     agent { label 'mac' }
                     steps{
+                        sh 'whoami' 
+                        sh 'hostname'
+                        echo WORKSPACE 
                         echo 'Recuperamos el workspace: unstash...'
                         unstash 'workspace'
                         sh '''
-                            ls -la
-                            whoami 
-                            hostname 
                             flake8 --exit-zero --format=pylint app > flake8.out
                         '''
                         recordIssues qualityGates: [
@@ -104,12 +106,12 @@ pipeline{
                stage('Security'){
                     agent { label 'linux' }
                     steps{
+                        sh 'whoami' 
+                        sh 'hostname'
+                        echo WORKSPACE 
                         echo 'Recuperamos el workspace: unstash...'
                         unstash 'workspace'
                         sh '''
-                            ls -la
-                            whoami 
-                            hostname 
                             bandit --exit-zero -r . -f custom -o bandit.out --msg-template "{abspath}:{line}: [{test_id}] {msg}"
                          '''
                         recordIssues(
@@ -125,12 +127,13 @@ pipeline{
                 stage('Performance'){
                     agent { label 'mac' }
                     steps{
+                        sh 'whoami' 
+                        sh 'hostname'
+                        echo WORKSPACE 
                         echo 'Recuperamos el workspace: unstash...'                   
                         unstash 'workspace'
                         sh '''
                             env
-                            whoami 
-                            hostname 
                             echo "PATH ->" $PATH
                             if ! nc -z 127.0.0.1 5000 ; then
                                 echo 'Levantamos Flask...'
@@ -151,12 +154,12 @@ pipeline{
             agent { label 'mac' }
             steps{
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE'){
+                    sh 'whoami' 
+                    sh 'hostname'
+                    echo WORKSPACE 
                     echo 'Recuperamos el workspace: unstash...'                   
                     unstash 'workspace'
                     sh '''
-                        ls -la
-                        whoami 
-                        hostname 
                         coverage xml
                         ls -la
                     '''
